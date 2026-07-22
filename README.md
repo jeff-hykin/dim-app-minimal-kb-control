@@ -1,4 +1,4 @@
-# dim-teleop
+# dim-app-minimal-kb-control
 
 A [DimOS dashboard](https://github.com/jeff-hykin/dim-app) app for **driving a
 robot over Zenoh**. It publishes `tele_cmd_vel` (a `geometry_msgs.Twist`) from a
@@ -32,7 +32,7 @@ newline-JSON over stdio: velocities down, camera frames up.
 ## Install
 
 ```bash
-dim install https://github.com/jeff-hykin/dim-teleop
+dim install https://github.com/jeff-hykin/dim-app-minimal-kb-control
 ```
 
 Licensed under the Apache License, Version 2.0.
