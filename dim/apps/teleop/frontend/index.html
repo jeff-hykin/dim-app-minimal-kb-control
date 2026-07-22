@@ -1,0 +1,243 @@
+<!doctype html>
+<!--
+  Teleop — browser half. Shows the robot's `color_image` (JPEG frames relayed by
+  the backend off Zenoh) and drives it with WASD, publishing `tele_cmd_vel` (a
+  Twist). W/S = forward/back (linear.x), A/D = turn (angular.z), Q/E = strafe
+  (linear.y), Space = stop — matching DimOS's cmd_vel convention. The on-screen
+  keys mirror the physical keyboard and are also click/touch-holdable. Velocities
+  are re-sent on a fixed tick while held, and a zero Twist is sent the moment
+  input stops. Follows the desktop light/dark theme.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Teleop · DimOS</title>
+<link rel="stylesheet" href="/assets/theme.css" />
+<style>
+  html, body { height: 100%; margin: 0; overflow: hidden; font-family: var(--sans); color: var(--fg); }
+  #stage { position: absolute; inset: 0; display: grid; place-items: center;
+    background: radial-gradient(120% 90% at 50% 0%, oklch(0.97 0.003 250) 0%, oklch(0.93 0.005 252) 100%); }
+  body.dark #stage { background: radial-gradient(120% 90% at 50% 0%, oklch(0.24 0.02 256) 0%, oklch(0.14 0.015 258) 100%); }
+  #cam { max-width: 100%; max-height: 100%; object-fit: contain; display: none; image-rendering: auto; }
+  #placeholder { color: var(--muted-fg); font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; text-align: center; }
+  #placeholder .big { font-size: 13px; color: var(--fg); font-family: var(--sans); font-weight: 600; margin-bottom: 6px; }
+
+  .topbar { position: absolute; top: 0; left: 0; right: 0; height: 48px; z-index: 5;
+    display: flex; align-items: center; gap: 10px; padding: 0 16px;
+    border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--card) 82%, transparent);
+    backdrop-filter: blur(10px); box-shadow: var(--shadow-xs); }
+  .topbar .brand { width: 22px; height: 22px; flex: none; color: #22d3ee; }
+  .topbar .title { font-size: 14px; font-weight: 650; letter-spacing: 0.02em; }
+  .topbar .sub { font-size: 11px; color: var(--muted-fg); font-family: var(--mono); }
+  .topbar .spacer { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px;
+    color: var(--muted-fg); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
+    background: color-mix(in oklch, var(--card) 60%, transparent); }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-fg); transition: background .3s; }
+  .pill.on { color: color-mix(in oklch, var(--info) 70%, var(--fg)); border-color: color-mix(in oklch, var(--info) 35%, var(--border)); }
+  .pill.on .dot { background: var(--info); box-shadow: 0 0 0 3px color-mix(in oklch, var(--info) 22%, transparent); }
+
+  .dock { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 4;
+    display: flex; align-items: flex-end; gap: 20px; padding: 14px 16px;
+    background: color-mix(in oklch, var(--card) 88%, transparent); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-md); backdrop-filter: blur(10px); }
+
+  .pad { display: grid; grid-template-columns: repeat(3, 46px); grid-auto-rows: 46px; gap: 7px; flex: none; }
+  .pad .key { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    font-family: var(--mono); font-size: 15px; font-weight: 650; color: var(--fg); cursor: pointer; user-select: none;
+    touch-action: none; background: color-mix(in oklch, var(--card) 70%, transparent);
+    border: 1px solid var(--border); border-bottom-width: 3px; border-radius: var(--radius);
+    transition: background .06s, transform .06s; }
+  .pad .key small { font-size: 7.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-fg); font-weight: 700; }
+  .pad .key.wide { grid-column: 1 / span 3; flex-direction: row; gap: 6px; font-size: 11px; letter-spacing: 0.08em; }
+  .pad .key:hover { background: var(--accent); }
+  .pad .key.active { background: var(--primary); color: var(--primary-fg, white); border-bottom-width: 1px;
+    transform: translateY(2px); box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 22%, transparent); }
+  .pad .key.active small { color: color-mix(in oklch, var(--primary-fg, white) 80%, transparent); }
+
+  .side { display: flex; flex-direction: column; gap: 10px; min-width: 200px; }
+  .readout { display: flex; gap: 8px; font-family: var(--mono); font-size: 12px; }
+  .readout .cell { flex: 1; text-align: center; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 5px 4px; background: color-mix(in oklch, var(--card) 60%, transparent); }
+  .readout .cell b { display: block; font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted-fg); font-weight: 700; margin-bottom: 2px; }
+  .sliders { display: grid; gap: 7px; }
+  .sliders label { display: grid; grid-template-columns: 66px 1fr 46px; align-items: center; gap: 8px;
+    font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted-fg); font-weight: 700; }
+  .sliders .val { font-family: var(--mono); font-size: 11px; text-align: right; color: var(--fg); }
+  input[type=range] { width: 100%; accent-color: var(--primary); }
+  .btn { font: inherit; font-size: 12px; font-weight: 650; color: var(--fg); cursor: pointer;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 12px; }
+  .btn.stop { color: color-mix(in oklch, var(--destructive, oklch(0.62 0.2 25)) 80%, var(--fg));
+    border-color: color-mix(in oklch, var(--destructive, oklch(0.62 0.2 25)) 40%, var(--border)); }
+  .btn:hover { background: var(--accent); }
+  .keyhint { position: absolute; bottom: 20px; left: 18px; z-index: 4; font-family: var(--mono); font-size: 10px;
+    color: var(--muted-fg); opacity: 0.75; line-height: 1.7; user-select: none; }
+  .keyhint kbd { font-family: var(--mono); border: 1px solid var(--border); border-bottom-width: 2px;
+    border-radius: 4px; padding: 0 4px; color: var(--fg); background: color-mix(in oklch, var(--card) 70%, transparent); }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <img id="cam" alt="color_image" />
+    <div id="placeholder">
+      <div class="big">Waiting for <code>color_image</code></div>
+      Start a DimOS stack publishing a camera on Zenoh.
+    </div>
+  </div>
+
+  <div class="topbar">
+    <svg class="brand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+         stroke-linecap="round" stroke-linejoin="round">
+      <line x1="6" y1="11" x2="10" y2="11"/><line x1="8" y1="9" x2="8" y2="13"/>
+      <line x1="15" y1="13" x2="15" y2="13"/><line x1="18" y1="10" x2="18" y2="10"/>
+      <path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.544-.604-6.584-.685-7.258-.007-.05-.011-.101-.017-.151A4 4 0 0 0 17.32 5z"/>
+    </svg>
+    <span class="title">Teleop</span>
+    <span class="sub">tele_cmd_vel &nbsp;·&nbsp; color_image</span>
+    <span class="spacer"></span>
+    <span class="pill" id="status"><span class="dot"></span><span id="status-text">connecting…</span></span>
+  </div>
+
+  <div class="keyhint">click the view, then use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · <kbd>Q</kbd><kbd>E</kbd> strafe · <kbd>Space</kbd> stop</div>
+
+  <div class="dock">
+    <div class="pad" id="pad">
+      <div class="key" data-key="q">Q<small>strafe ◄</small></div>
+      <div class="key" data-key="w">W<small>fwd</small></div>
+      <div class="key" data-key="e">E<small>strafe ►</small></div>
+      <div class="key" data-key="a">A<small>turn ◄</small></div>
+      <div class="key" data-key="s">S<small>back</small></div>
+      <div class="key" data-key="d">D<small>turn ►</small></div>
+      <div class="key wide" data-key=" ">SPACE · stop</div>
+    </div>
+    <div class="side">
+      <div class="readout">
+        <div class="cell"><b>vx m/s</b><span id="r-vx">0.00</span></div>
+        <div class="cell"><b>vy m/s</b><span id="r-vy">0.00</span></div>
+        <div class="cell"><b>ωz r/s</b><span id="r-wz">0.00</span></div>
+      </div>
+      <div class="sliders">
+        <label>Linear<input type="range" id="lin" min="0.05" max="1.5" step="0.05" value="0.5" /><span class="val" id="lin-v">0.50</span></label>
+        <label>Angular<input type="range" id="ang" min="0.1" max="3" step="0.1" value="1.0" /><span class="val" id="ang-v">1.00</span></label>
+      </div>
+      <button class="btn stop" id="stop">■ Stop</button>
+    </div>
+  </div>
+
+<script type="module">
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.0/frontend.js"
+
+const app = new DimAppFrontend()
+
+const camEl = document.getElementById("cam")
+const placeholderEl = document.getElementById("placeholder")
+const statusEl = document.getElementById("status")
+const statusText = document.getElementById("status-text")
+const linEl = document.getElementById("lin")
+const angEl = document.getElementById("ang")
+const linValEl = document.getElementById("lin-v")
+const angValEl = document.getElementById("ang-v")
+
+const TICK_MS = 100
+
+let linMax = parseFloat(linEl.value)
+let angMax = parseFloat(angEl.value)
+linEl.oninput = () => { linMax = parseFloat(linEl.value); linValEl.textContent = linMax.toFixed(2) }
+angEl.oninput = () => { angMax = parseFloat(angEl.value); angValEl.textContent = angMax.toFixed(2) }
+
+// ── incoming frames + status ────────────────────────────────────────────────
+app.receiveRequest((kind, payload) => {
+    if (kind === "frame" && payload && payload.b64) {
+        camEl.src = "data:image/jpeg;base64," + payload.b64
+        if (camEl.style.display !== "block") { camEl.style.display = "block"; placeholderEl.style.display = "none" }
+    } else if (kind === "status") {
+        const on = !!(payload && payload.zenoh)
+        statusEl.classList.toggle("on", on)
+        statusText.textContent = on ? "zenoh peer" : "no zenoh"
+    }
+})
+
+// ── WASD input → velocity ───────────────────────────────────────────────────
+const keys = new Set()
+const CONTROL_KEYS = new Set(["w", "a", "s", "d", "q", "e", "arrowup", "arrowdown", "arrowleft", "arrowright", " "])
+const keyEls = new Map()  // "w" -> on-screen key element, for press highlighting
+document.querySelectorAll("#pad .key").forEach((el) => keyEls.set(el.dataset.key, el))
+let lastNonZero = false
+
+function reflect(key, on) {
+    const el = keyEls.get(key)
+    if (el) el.classList.toggle("active", on)
+}
+
+function currentVelocity() {
+    // W/S forward-back (linear.x), A/D turn (angular.z), Q/E strafe (linear.y)
+    const forward = (keys.has("w") || keys.has("arrowup") ? 1 : 0) - (keys.has("s") || keys.has("arrowdown") ? 1 : 0)
+    const turn = (keys.has("a") || keys.has("arrowleft") ? 1 : 0) - (keys.has("d") || keys.has("arrowright") ? 1 : 0)
+    const strafe = (keys.has("q") ? 1 : 0) - (keys.has("e") ? 1 : 0)
+    return { vx: forward * linMax, vy: strafe * linMax, wz: turn * angMax }
+}
+
+function tick() {
+    const { vx, vy, wz } = currentVelocity()
+    document.getElementById("r-vx").textContent = vx.toFixed(2)
+    document.getElementById("r-vy").textContent = vy.toFixed(2)
+    document.getElementById("r-wz").textContent = wz.toFixed(2)
+    const moving = vx !== 0 || vy !== 0 || wz !== 0
+    if (moving) {
+        app.send("cmd_vel", { vx, vy, wz })  // heartbeat: re-sent every tick while held
+        lastNonZero = true
+    } else if (lastNonZero) {
+        app.send("stop")
+        lastNonZero = false
+    }
+}
+setInterval(tick, TICK_MS)
+
+function press(key) {
+    if (!keys.has(key)) { keys.add(key); reflect(key, true) }
+}
+function release(key) {
+    if (keys.delete(key)) reflect(key, false)
+}
+function stopNow() {
+    for (const key of keys) reflect(key, false)
+    keys.clear()
+    app.send("stop")
+    lastNonZero = false
+}
+
+addEventListener("keydown", (event) => {
+    const key = event.key.toLowerCase()
+    if (!CONTROL_KEYS.has(key)) return
+    event.preventDefault()
+    if (event.repeat) return
+    if (key === " ") { stopNow(); return }
+    press(key)
+})
+addEventListener("keyup", (event) => {
+    const key = event.key.toLowerCase()
+    if (CONTROL_KEYS.has(key)) release(key)
+})
+addEventListener("blur", stopNow)
+
+// on-screen keys mirror the keyboard: hold with mouse / touch
+for (const [key, el] of keyEls) {
+    el.addEventListener("pointerdown", (event) => {
+        event.preventDefault()
+        el.setPointerCapture(event.pointerId)
+        if (key === " ") stopNow()
+        else press(key)
+    })
+    const up = () => { if (key !== " ") release(key) }
+    el.addEventListener("pointerup", up)
+    el.addEventListener("pointercancel", up)
+}
+
+document.getElementById("stop").addEventListener("click", stopNow)
+
+app.send("hello")
+</script>
+</body>
+</html>
