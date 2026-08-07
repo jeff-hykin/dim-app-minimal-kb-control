@@ -2,9 +2,8 @@
 
 Publishes teleop velocities as `tele_cmd_vel` (geometry_msgs.Twist) and
 subscribes to `color_image` (sensor_msgs.Image), forwarding JPEG frames to the
-Deno backend. Uses DimOS's own ZenohTransport with usrpwd auth — user "dimos",
-password = this machine's id — so peers only link when they share the secret,
-and the LCM wire encoding matches the rest of the stack exactly.
+Deno backend. Uses DimOS's own ZenohTransport, so the LCM wire encoding matches
+the rest of the stack exactly.
 
 Protocol: newline-delimited JSON on stdin/stdout.
   in : {"type":"cmd_vel","vx":f,"vy":f,"wz":f} | {"type":"stop"}
@@ -15,8 +14,6 @@ from __future__ import annotations
 
 import base64
 import json
-from pathlib import Path
-import subprocess
 import sys
 import threading
 import time
@@ -31,22 +28,8 @@ from dimos.msgs.sensor_msgs.Image import Image
 
 FRAME_HZ = 12.0
 JPEG_QUALITY = 60
-ZENOH_USER = "dimos"
 # DimOS namespaces every Zenoh key under this prefix (transport_factory.transport_topic)
 ZENOH_NAMESPACE = "dimos"
-
-
-def machine_id() -> str:
-    if sys.platform == "linux":
-        return Path("/etc/machine-id").read_text().strip()
-    if sys.platform == "darwin":
-        parts = subprocess.run(
-            ["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
-            capture_output=True,
-            text=True,
-        ).stdout.split('"')
-        return parts[parts.index("IOPlatformUUID") + 2].lower()
-    raise RuntimeError(f"unsupported platform for machine id: {sys.platform}")
 
 
 _write_lock = threading.Lock()
@@ -60,13 +43,8 @@ def emit(message: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    password = machine_id()
-    cmd_publisher = ZenohTransport(
-        f"{ZENOH_NAMESPACE}/tele_cmd_vel", Twist, user=ZENOH_USER, password=password
-    )
-    image_subscriber = ZenohTransport(
-        f"{ZENOH_NAMESPACE}/color_image", Image, user=ZENOH_USER, password=password
-    )
+    cmd_publisher = ZenohTransport(f"{ZENOH_NAMESPACE}/tele_cmd_vel", Twist)
+    image_subscriber = ZenohTransport(f"{ZENOH_NAMESPACE}/color_image", Image)
 
     last_frame_at = [0.0]
 

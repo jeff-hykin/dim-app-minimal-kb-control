@@ -1,10 +1,10 @@
 // Teleop — backend half (runs in the DimOS desktop's Deno process).
 //
-// Zenoh (peer mode, usrpwd auth, LCM encoding) has no good native Deno client,
-// so — like go2_dash shelling out to its Rust helper — we run a tiny Python
-// helper (zenoh_bridge.py) via the desktop-provided interpreter (ctx.python).
-// The helper uses DimOS's own ZenohTransport, so the machine-id password and
-// wire format match the rest of the stack. We relay newline-JSON over stdio:
+// Zenoh (peer mode, LCM encoding) has no good native Deno client, so — like
+// go2_dash shelling out to its Rust helper — we run a tiny Python helper
+// (zenoh_bridge.py) via the desktop-provided interpreter (ctx.python).
+// The helper uses DimOS's own ZenohTransport, so the wire format matches the
+// rest of the stack. We relay newline-JSON over stdio:
 // teleop velocities down to the helper, decoded camera frames back up to the
 // browser panel.
 
@@ -16,15 +16,38 @@ const ctx = dimContext()
 
 const BRIDGE = new URL("./zenoh_bridge.py", import.meta.url).pathname
 const RESTART_MS = 3000
+const MAX_RESTART_MS = 60000
+// A bridge that survives this long counts as a real session, so the next crash
+// starts backing off from scratch rather than from the accumulated delay.
+const HEALTHY_MS = 15000
+const KEPT_STDERR_LINES = 40
 
 let writer = null
 let zenohUp = false
+let restartMs = RESTART_MS
+let lastFailure = ""
 
 function pythonCmd() {
     return (ctx && ctx.python) || "python3"
 }
 
+// The bridge shares the desktop's stdout/stderr, so an inherited stderr from a
+// crash-looping helper writes straight into the service log forever. Report each
+// distinct failure once and swallow the repeats.
+function reportFailure(text) {
+    const failure = text.trim()
+    if (!failure) {
+        return
+    }
+    if (failure !== lastFailure) {
+        lastFailure = failure
+        console.error(`teleop: zenoh bridge failed\n${failure}`)
+    }
+    dimApp.send("status", { zenoh: false, error: failure.split("\n").pop() })
+}
+
 async function run() {
+    const startedAt = Date.now()
     let child
     try {
         child = new Deno.Command(pythonCmd(), {
@@ -32,12 +55,25 @@ async function run() {
             cwd: (ctx && ctx.dimosDir) || undefined,
             stdin: "piped",
             stdout: "piped",
-            stderr: "inherit",
+            stderr: "piped",
         }).spawn()
-    } catch {
-        setTimeout(run, RESTART_MS)
+    } catch (error) {
+        reportFailure(`cannot start ${pythonCmd()}: ${error.message}`)
+        restartMs = Math.min(restartMs * 2, MAX_RESTART_MS)
+        setTimeout(run, restartMs)
         return
     }
+
+    const stderrTail = []
+    const stderrLines = child.stderr.pipeThrough(new TextDecoderStream()).pipeThrough(new TextLineStream())
+    const stderrDone = (async () => {
+        for await (const line of stderrLines) {
+            stderrTail.push(line)
+            if (stderrTail.length > KEPT_STDERR_LINES) {
+                stderrTail.shift()
+            }
+        }
+    })()
 
     writer = child.stdin.getWriter()
 
@@ -60,14 +96,25 @@ async function run() {
         }
     })()
 
-    await child.status
+    const status = await child.status
+    await stderrDone
     try {
         writer?.releaseLock()
     } catch { /* already released */ }
     writer = null
     zenohUp = false
-    dimApp.send("status", { zenoh: false })
-    setTimeout(run, RESTART_MS)
+    if (Date.now() - startedAt >= HEALTHY_MS) {
+        restartMs = RESTART_MS
+        lastFailure = ""
+    } else {
+        restartMs = Math.min(restartMs * 2, MAX_RESTART_MS)
+    }
+    if (status.success) {
+        dimApp.send("status", { zenoh: false })
+    } else {
+        reportFailure(stderrTail.join("\n"))
+    }
+    setTimeout(run, restartMs)
 }
 run()
 
@@ -84,6 +131,6 @@ dimApp.onReceive((kind, payload) => {
     } else if (kind === "stop") {
         toBridge({ type: "stop" })
     } else if (kind === "hello") {
-        dimApp.send("status", { zenoh: zenohUp })
+        dimApp.send("status", { zenoh: zenohUp, error: zenohUp ? "" : lastFailure.split("\n").pop() })
     }
 })

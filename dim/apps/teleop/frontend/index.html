@@ -154,8 +154,10 @@ app.receiveRequest((kind, payload) => {
         if (camEl.style.display !== "block") { camEl.style.display = "block"; placeholderEl.style.display = "none" }
     } else if (kind === "status") {
         const on = !!(payload && payload.zenoh)
+        const error = (payload && payload.error) || ""
         statusEl.classList.toggle("on", on)
-        statusText.textContent = on ? "zenoh peer" : "no zenoh"
+        statusText.textContent = on ? "zenoh peer" : (error ? "bridge error" : "no zenoh")
+        statusEl.title = on ? "" : error
     }
 })
 
