@@ -130,6 +130,10 @@ dimApp.onReceive((kind, payload) => {
         toBridge({ type: "cmd_vel", vx: +payload?.vx || 0, vy: +payload?.vy || 0, wz: +payload?.wz || 0 })
     } else if (kind === "stop") {
         toBridge({ type: "stop" })
+    } else if (kind === "video") {
+        // The page found (or lost) a cockpit relay. Passed straight through so the
+        // helper can drop its color_image subscription while the relay carries video.
+        toBridge({ type: "video", source: payload?.source === "relay" ? "relay" : "bridge" })
     } else if (kind === "hello") {
         dimApp.send("status", { zenoh: zenohUp, error: zenohUp ? "" : lastFailure.split("\n").pop() })
     }

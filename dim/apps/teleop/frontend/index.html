@@ -1,12 +1,26 @@
 <!doctype html>
 <!--
-  Teleop — browser half. Shows the robot's `color_image` (JPEG frames relayed by
-  the backend off Zenoh) and drives it with WASD, publishing `tele_cmd_vel` (a
+  Teleop — browser half. Shows the robot's `color_image` and drives it with WASD,
+  publishing `tele_cmd_vel` (a
   Twist). W/S = forward/back (linear.x), A/D = turn (angular.z), Q/E = strafe
   (linear.y), Space = stop — matching DimOS's cmd_vel convention. The on-screen
   keys mirror the physical keyboard and are also click/touch-holdable. Velocities
   are re-sent on a fixed tick while held, and a zero Twist is sent the moment
   input stops. Follows the desktop light/dark theme.
+
+  Video comes from the DimOS cockpit relay when one is up: the page asks the
+  desktop at /api/relay, imports the relay's own zero-build SDK bundle, and
+  subscribes to `color_image` over WebTransport. That path encodes JPEG inside
+  the running stack, only while this page is watching — nothing decodes and
+  re-encodes images in a helper process. The zenoh bridge stays as the fallback
+  for a stack with no relay (the dimos [web] extra is optional), and is told to
+  stop sending frames the moment the relay path is live.
+
+  Velocities still go through the bridge. The SDK's viewer half is read-only by
+  design: the tx path for `tele_cmd_vel` sits behind @dimos/sdk/internal/teleop,
+  which is not in the /sdk.js bundle (sdk/vite.config.ts builds the root entry
+  only) and is marked internal until W9 upstream. When it lands publicly the
+  bridge can go away entirely.
 -->
 <html lang="en">
 <head>
@@ -83,7 +97,7 @@
     <img id="cam" alt="color_image" />
     <div id="placeholder">
       <div class="big">Waiting for <code>color_image</code></div>
-      Start a DimOS stack publishing a camera on Zenoh.
+      Start a DimOS stack publishing a camera.
     </div>
   </div>
 
@@ -147,17 +161,95 @@ let angMax = parseFloat(angEl.value)
 linEl.oninput = () => { linMax = parseFloat(linEl.value); linValEl.textContent = linMax.toFixed(2) }
 angEl.oninput = () => { angMax = parseFloat(angEl.value); angValEl.textContent = angMax.toFixed(2) }
 
+// ── video source ─────────────────────────────────────────────────────────────────
+// Two sources, one <img>. The relay wins whenever it is connected, and the
+// bridge is only asked for frames while it isn't.
+let videoSource = "bridge"
+let objectUrl = null
+
+function showJpeg(bytes) {
+    const next = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }))
+    camEl.src = next
+    // Revoke the PREVIOUS frame, not this one — the <img> hasn't decoded it yet.
+    if (objectUrl) {
+        URL.revokeObjectURL(objectUrl)
+    }
+    objectUrl = next
+    if (camEl.style.display !== "block") {
+        camEl.style.display = "block"
+        placeholderEl.style.display = "none"
+    }
+}
+
+function useSource(source) {
+    if (videoSource === source) {
+        return
+    }
+    videoSource = source
+    // Silence the bridge's image half while the relay carries video; it re-arms
+    // by itself if the relay connection dies.
+    app.send("video", { source })
+}
+
+// The relay belongs to the running stack, so the desktop is what knows whether
+// there is one (/api/relay). Its SDK bundle answers with wildcard CORS, which is
+// what makes this cross-origin zero-build import the supported path.
+async function startRelayVideo() {
+    let info
+    try {
+        info = await (await fetch("/api/relay")).json()
+    } catch {
+        return // desktop too old to know about the relay
+    }
+    if (!info || !info.up) {
+        return
+    }
+    // WebTransport needs a secure context. http://127.0.0.1 qualifies; a desktop
+    // bound to 0.0.0.0 and browsed over plain http from elsewhere does not.
+    if (!window.isSecureContext) {
+        console.warn("teleop: not a secure context, so no WebTransport — staying on the bridge")
+        return
+    }
+    let connect
+    try {
+        ({ connect } = await import(info.sdk))
+    } catch (error) {
+        console.warn(`teleop: cockpit SDK unavailable at ${info.sdk}`, error)
+        return
+    }
+    const session = connect({ url: info.url })
+    session.status.subscribe(() => {
+        if (session.status.get().transport.phase !== "connected") {
+            useSource("bridge")
+        }
+    })
+    // jpeg.v1 decodes to the raw JPEG bytes; pixel decode is the consumer's job.
+    session.subscribe("color_image", (snapshot) => {
+        const bytes = snapshot.slot && snapshot.slot.value
+        if (!bytes) {
+            return
+        }
+        useSource("relay")
+        showJpeg(bytes)
+    })
+}
+startRelayVideo()
+
 // ── incoming frames + status ────────────────────────────────────────────────
 app.receiveRequest((kind, payload) => {
     if (kind === "frame" && payload && payload.b64) {
+        if (videoSource === "relay") {
+            return
+        }
         camEl.src = "data:image/jpeg;base64," + payload.b64
         if (camEl.style.display !== "block") { camEl.style.display = "block"; placeholderEl.style.display = "none" }
     } else if (kind === "status") {
         const on = !!(payload && payload.zenoh)
         const error = (payload && payload.error) || ""
-        statusEl.classList.toggle("on", on)
-        statusText.textContent = on ? "zenoh peer" : (error ? "bridge error" : "no zenoh")
-        statusEl.title = on ? "" : error
+        const live = on || videoSource === "relay"
+        statusEl.classList.toggle("on", live)
+        statusText.textContent = videoSource === "relay" ? "relay video" : (on ? "zenoh peer" : (error ? "bridge error" : "no zenoh"))
+        statusEl.title = live ? "" : error
     }
 })
 

@@ -1,12 +1,18 @@
 """Zenoh <-> stdio bridge for the Teleop dim app.
 
-Publishes teleop velocities as `tele_cmd_vel` (geometry_msgs.Twist) and
-subscribes to `color_image` (sensor_msgs.Image), forwarding JPEG frames to the
-Deno backend. Uses DimOS's own ZenohTransport, so the LCM wire encoding matches
-the rest of the stack exactly.
+Publishes teleop velocities as `tele_cmd_vel` (geometry_msgs.Twist). Uses DimOS's
+own ZenohTransport, so the LCM wire encoding matches the rest of the stack exactly.
+
+Video is normally NOT our job: when the stack is on a cockpit relay the browser
+subscribes to `color_image` itself over WebTransport, and the JPEG is encoded
+inside the stack rather than decoded and re-encoded here. This bridge only carries
+video for a stack with no relay, and the frontend switches it off (`video` with
+source "relay") the moment the relay path is live. Cheap by construction: the
+`color_image` subscription is torn down while it is off, so nothing decodes images.
 
 Protocol: newline-delimited JSON on stdin/stdout.
   in : {"type":"cmd_vel","vx":f,"vy":f,"wz":f} | {"type":"stop"}
+       {"type":"video","source":"relay"|"bridge"}
   out: {"type":"status","zenoh":true} | {"type":"frame","w":W,"h":H,"b64":"..."}
 """
 
@@ -44,9 +50,9 @@ def emit(message: dict[str, Any]) -> None:
 
 def main() -> None:
     cmd_publisher = ZenohTransport(f"{ZENOH_NAMESPACE}/tele_cmd_vel", Twist)
-    image_subscriber = ZenohTransport(f"{ZENOH_NAMESPACE}/color_image", Image)
 
     last_frame_at = [0.0]
+    image_subscriber: ZenohTransport | None = None
 
     def on_image(image: Image) -> None:
         now = time.monotonic()
@@ -67,7 +73,26 @@ def main() -> None:
             }
         )
 
-    image_subscriber.subscribe(on_image)
+    def set_video(enabled: bool) -> None:
+        """Own the `color_image` subscription only while the browser needs us to.
+
+        Torn down rather than gated on a flag: the cost this avoids is zenoh
+        delivering and LCM-decoding every frame in this process, which a flag
+        inside the callback would still pay.
+        """
+        nonlocal image_subscriber
+        if enabled == (image_subscriber is not None):
+            return
+        if enabled:
+            image_subscriber = ZenohTransport(f"{ZENOH_NAMESPACE}/color_image", Image)
+            image_subscriber.subscribe(on_image)
+        else:
+            image_subscriber.stop()
+            image_subscriber = None
+
+    # Start carrying video: a page that finds a relay switches us off within a
+    # frame or two, and a page that doesn't never had another source.
+    set_video(True)
     cmd_publisher.start()
     emit({"type": "status", "zenoh": True})
 
@@ -88,9 +113,11 @@ def main() -> None:
             cmd_publisher.broadcast(None, twist)
         elif kind == "stop":
             cmd_publisher.broadcast(None, Twist.zero())
+        elif kind == "video":
+            set_video(command.get("source") != "relay")
 
     cmd_publisher.stop()
-    image_subscriber.stop()
+    set_video(False)
 
 
 if __name__ == "__main__":
