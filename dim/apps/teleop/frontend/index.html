@@ -201,7 +201,13 @@ async function startRelayVideo() {
     } catch {
         return // desktop too old to know about the relay
     }
+    // No relay yet — maybe the blueprint just isn't running. Keep looking, so a
+    // page opened before the launch still picks the relay up. Once connected the
+    // SDK reconnects across relay restarts on its own, so one connect() is enough.
     if (!info || !info.up) {
+        if (info && info.available !== false) {
+            setTimeout(startRelayVideo, 5000)
+        }
         return
     }
     // WebTransport needs a secure context. http://127.0.0.1 qualifies; a desktop

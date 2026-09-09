@@ -24,6 +24,10 @@ const KEPT_STDERR_LINES = 40
 
 let writer = null
 let zenohUp = false
+// Last video mode the page asked for. Replayed to every fresh helper: a helper
+// starts with its color_image subscription ON, and the page only reports changes,
+// so a restarted helper would otherwise decode frames nobody wants.
+let videoSource = "bridge"
 let restartMs = RESTART_MS
 let lastFailure = ""
 
@@ -76,6 +80,9 @@ async function run() {
     })()
 
     writer = child.stdin.getWriter()
+    if (videoSource === "relay") {
+        toBridge({ type: "video", source: videoSource })
+    }
 
     const lines = child.stdout.pipeThrough(new TextDecoderStream()).pipeThrough(new TextLineStream())
     ;(async () => {
@@ -133,7 +140,8 @@ dimApp.onReceive((kind, payload) => {
     } else if (kind === "video") {
         // The page found (or lost) a cockpit relay. Passed straight through so the
         // helper can drop its color_image subscription while the relay carries video.
-        toBridge({ type: "video", source: payload?.source === "relay" ? "relay" : "bridge" })
+        videoSource = payload?.source === "relay" ? "relay" : "bridge"
+        toBridge({ type: "video", source: videoSource })
     } else if (kind === "hello") {
         dimApp.send("status", { zenoh: zenohUp, error: zenohUp ? "" : lastFailure.split("\n").pop() })
     }
