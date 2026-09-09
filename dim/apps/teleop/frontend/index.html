@@ -243,13 +243,18 @@ async function startRelayVideo() {
         }
     })
     // jpeg.v1 decodes to the raw JPEG bytes; pixel decode is the consumer's job.
+    // Snapshots re-publish the LAST frame while the channel is silent (rising age
+    // buckets), so only a new slot version counts as live relay video — otherwise
+    // a dead relay's frozen frame keeps winning over the bridge fallback.
+    let lastSlotVersion = -1
     session.subscribe("color_image", (snapshot) => {
-        const bytes = snapshot.slot && snapshot.slot.value
-        if (!bytes) {
+        const slot = snapshot.slot
+        if (!slot || !slot.value || slot.version === lastSlotVersion) {
             return
         }
+        lastSlotVersion = slot.version
         useSource("relay")
-        showJpeg(bytes)
+        showJpeg(slot.value)
     })
 }
 startRelayVideo()
