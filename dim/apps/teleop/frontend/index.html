@@ -141,7 +141,7 @@
   </div>
 
 <script type="module">
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.0/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.1/frontend.js"
 
 const app = new DimAppFrontend()
 
@@ -261,12 +261,11 @@ startRelayVideo()
 
 // ── incoming frames + status ────────────────────────────────────────────────
 app.receiveRequest((kind, payload) => {
-    if (kind === "frame" && payload && payload.b64) {
+    if (kind === "frame" && payload && payload.bytes) {
         if (videoSource === "relay") {
             return
         }
-        camEl.src = "data:image/jpeg;base64," + payload.b64
-        if (camEl.style.display !== "block") { camEl.style.display = "block"; placeholderEl.style.display = "none" }
+        showJpeg(payload.bytes)
     } else if (kind === "status") {
         bridgeStatus = { on: !!(payload && payload.zenoh), error: (payload && payload.error) || "" }
         renderStatus()

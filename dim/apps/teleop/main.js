@@ -9,7 +9,7 @@
 // browser panel.
 
 import { TextLineStream } from "https://deno.land/std@0.224.0/streams/text_line_stream.ts"
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.0/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.1/backend.js"
 
 const dimApp = new DimAppBackend()
 const ctx = dimContext()
@@ -95,7 +95,9 @@ async function run() {
             }
             if (!msg || typeof msg !== "object" || !msg.type) continue
             if (msg.type === "frame") {
-                dimApp.send("frame", { w: msg.w, h: msg.h, b64: msg.b64 })
+                // The stdio line protocol is base64; decode ONCE here and ship raw
+                // bytes over the bus (sendBytes) instead of re-base64ing to the page.
+                dimApp.sendBytes("frame", Uint8Array.from(atob(msg.b64), (c) => c.charCodeAt(0)), { w: msg.w, h: msg.h })
             } else if (msg.type === "status") {
                 zenohUp = !!msg.zenoh
                 dimApp.send("status", { zenoh: zenohUp })
