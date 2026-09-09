@@ -166,6 +166,18 @@ angEl.oninput = () => { angMax = parseFloat(angEl.value); angValEl.textContent =
 // bridge is only asked for frames while it isn't.
 let videoSource = "bridge"
 let objectUrl = null
+let bridgeStatus = { on: false, error: "" }
+
+// One pill, two inputs: what the zenoh helper reports and which source video is
+// riding. Rendered from both places that change either.
+function renderStatus() {
+    const live = bridgeStatus.on || videoSource === "relay"
+    statusEl.classList.toggle("on", live)
+    statusText.textContent = videoSource === "relay"
+        ? "relay video"
+        : (bridgeStatus.on ? "zenoh peer" : (bridgeStatus.error ? "bridge error" : "no zenoh"))
+    statusEl.title = live ? "" : bridgeStatus.error
+}
 
 function showJpeg(bytes) {
     const next = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }))
@@ -186,6 +198,7 @@ function useSource(source) {
         return
     }
     videoSource = source
+    renderStatus()
     // Silence the bridge's image half while the relay carries video; it re-arms
     // by itself if the relay connection dies.
     app.send("video", { source })
@@ -250,12 +263,8 @@ app.receiveRequest((kind, payload) => {
         camEl.src = "data:image/jpeg;base64," + payload.b64
         if (camEl.style.display !== "block") { camEl.style.display = "block"; placeholderEl.style.display = "none" }
     } else if (kind === "status") {
-        const on = !!(payload && payload.zenoh)
-        const error = (payload && payload.error) || ""
-        const live = on || videoSource === "relay"
-        statusEl.classList.toggle("on", live)
-        statusText.textContent = videoSource === "relay" ? "relay video" : (on ? "zenoh peer" : (error ? "bridge error" : "no zenoh"))
-        statusEl.title = live ? "" : error
+        bridgeStatus = { on: !!(payload && payload.zenoh), error: (payload && payload.error) || "" }
+        renderStatus()
     }
 })
 
