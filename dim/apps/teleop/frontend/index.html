@@ -8,19 +8,10 @@
   are re-sent on a fixed tick while held, and a zero Twist is sent the moment
   input stops. Follows the desktop light/dark theme.
 
-  Video comes from the DimOS cockpit relay when one is up: the page asks the
-  desktop at /api/relay, imports the relay's own zero-build SDK bundle, and
-  subscribes to `color_image` over WebTransport. That path encodes JPEG inside
-  the running stack, only while this page is watching — nothing decodes and
-  re-encodes images in a helper process. The zenoh bridge stays as the fallback
-  for a stack with no relay (the dimos [web] extra is optional), and is told to
-  stop sending frames the moment the relay path is live.
-
-  Velocities still go through the bridge. The SDK's viewer half is read-only by
-  design: the tx path for `tele_cmd_vel` sits behind @dimos/sdk/internal/teleop,
-  which is not in the /sdk.js bundle (sdk/vite.config.ts builds the root entry
-  only) and is marked internal until W9 upstream. When it lands publicly the
-  bridge can go away entirely.
+  Everything goes through Desktop's zenoh-web bridge (/zenoh-web): `color_image`
+  arrives as an H.264 video track (the bridge's dimos-image codec), and
+  `tele_cmd_vel` is published from the page with a zero-Twist deadman, so the
+  bridge stops the robot if this page goes away mid-drive.
 -->
 <html lang="en">
 <head>
@@ -33,7 +24,7 @@
   #stage { position: absolute; inset: 0; display: grid; place-items: center;
     background: radial-gradient(120% 90% at 50% 0%, oklch(0.97 0.003 250) 0%, oklch(0.93 0.005 252) 100%); }
   body.dark #stage { background: radial-gradient(120% 90% at 50% 0%, oklch(0.24 0.02 256) 0%, oklch(0.14 0.015 258) 100%); }
-  #cam { max-width: 100%; max-height: 100%; object-fit: contain; display: none; image-rendering: auto; }
+  #cam { width: 100%; height: 100%; object-fit: contain; display: none; }
   #placeholder { color: var(--muted-fg); font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; text-align: center; }
   #placeholder .big { font-size: 13px; color: var(--fg); font-family: var(--sans); font-weight: 600; margin-bottom: 6px; }
 
@@ -94,7 +85,7 @@
 </head>
 <body>
   <div id="stage">
-    <img id="cam" alt="color_image" />
+    <video id="cam" muted playsinline autoplay></video>
     <div id="placeholder">
       <div class="big">Waiting for <code>color_image</code></div>
       Start a DimOS stack publishing a camera.
@@ -141,9 +132,12 @@
   </div>
 
 <script type="module">
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.1/frontend.js"
+import { connect, Priority } from "https://esm.sh/gh/jeff-hykin/zenoh-web@v0.1.0/client/zenoh_web.ts"
+import { geometry_msgs } from "https://esm.sh/jsr/@dimos/msgs@0.1.4"
 
-const app = new DimAppFrontend()
+// dimos keys are `dimos/<topic>/<msg_name>`
+const CMD_KEY = "dimos/tele_cmd_vel/geometry_msgs.Twist"
+const IMAGE_KEY = "dimos/color_image/sensor_msgs.Image"
 
 const camEl = document.getElementById("cam")
 const placeholderEl = document.getElementById("placeholder")
@@ -161,116 +155,72 @@ let angMax = parseFloat(angEl.value)
 linEl.oninput = () => { linMax = parseFloat(linEl.value); linValEl.textContent = linMax.toFixed(2) }
 angEl.oninput = () => { angMax = parseFloat(angEl.value); angValEl.textContent = angMax.toFixed(2) }
 
-// ── video source ─────────────────────────────────────────────────────────────────
-// Two sources, one <img>. The relay wins whenever it is connected, and the
-// bridge is only asked for frames while it isn't.
-let videoSource = "bridge"
-let objectUrl = null
-let bridgeStatus = { on: false, error: "" }
+function twistBytes(vx, vy, wz) {
+    const Vector3 = geometry_msgs.Vector3
+    return new geometry_msgs.Twist({ linear: new Vector3({ x: vx, y: vy, z: 0 }), angular: new Vector3({ x: 0, y: 0, z: wz }) }).encode()
+}
+const STOP = twistBytes(0, 0, 0)
 
-// One pill, two inputs: what the zenoh helper reports and which source video is
-// riding. Rendered from both places that change either.
+// ── zenoh-web: video in, velocities out ─────────────────────────────────────────
+let zenoh = null
+let publisher = null
+let connection = "connecting"
+
 function renderStatus() {
-    const live = bridgeStatus.on || videoSource === "relay"
+    const live = connection === "connected" && publisher?.state === "open"
     statusEl.classList.toggle("on", live)
-    statusText.textContent = videoSource === "relay"
-        ? "relay video"
-        : (bridgeStatus.on ? "zenoh peer" : (bridgeStatus.error ? "bridge error" : "no zenoh"))
-    statusEl.title = live ? "" : bridgeStatus.error
+    statusText.textContent = live ? "zenoh-web" : (connection === "connected" ? "arming…" : (connection === "connecting" ? "connecting…" : "no bridge"))
 }
 
-function showJpeg(bytes) {
-    const next = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }))
-    camEl.src = next
-    // Revoke the PREVIOUS frame, not this one — the <img> hasn't decoded it yet.
-    if (objectUrl) {
-        URL.revokeObjectURL(objectUrl)
+// The deadman publishes one zero Twist if this page stops heartbeating. Once it
+// fires the publisher is spent ("tripped"), so a fresh one is armed in its place.
+async function armPublisher() {
+    publisher = zenoh.publisher(CMD_KEY, { delivery: "latest", priority: Priority.REAL_TIME, latencyLimit: 300 })
+    const current = publisher
+    current.onTripped(() => { renderStatus(); setTimeout(() => { if (publisher === current) { armPublisher() } }, 1000) })
+    try {
+        await current.ready()
+        await current.setDeadman(STOP)
+    } catch (error) {
+        console.warn("teleop: tele_cmd_vel publisher not armed", error)
     }
-    objectUrl = next
+    renderStatus()
+}
+
+function showVideo(mediaStream) {
+    if (camEl.srcObject !== mediaStream) {
+        camEl.srcObject = mediaStream
+        camEl.play().catch(() => {})
+    }
     if (camEl.style.display !== "block") {
         camEl.style.display = "block"
         placeholderEl.style.display = "none"
     }
 }
 
-function useSource(source) {
-    if (videoSource === source) {
+function send(bytes) {
+    if (publisher?.state !== "open") {
         return
     }
-    videoSource = source
-    renderStatus()
-    // Silence the bridge's image half while the relay carries video; it re-arms
-    // by itself if the relay connection dies.
-    app.send("video", { source })
+    try { publisher.put(bytes) } catch { /* tripped or closed: armPublisher replaces it */ }
 }
 
-// The relay belongs to the running stack, so the desktop is what knows whether
-// there is one (/api/relay). Its SDK bundle answers with wildcard CORS, which is
-// what makes this cross-origin zero-build import the supported path.
-async function startRelayVideo() {
-    let info
-    try {
-        info = await (await fetch("/api/relay")).json()
-    } catch {
-        return // desktop too old to know about the relay
-    }
-    // No relay yet — maybe the blueprint just isn't running. Keep looking, so a
-    // page opened before the launch still picks the relay up. Once connected the
-    // SDK reconnects across relay restarts on its own, so one connect() is enough.
-    if (!info || !info.up) {
-        if (info && info.available !== false) {
-            setTimeout(startRelayVideo, 5000)
+async function start() {
+    while (!zenoh) {
+        try {
+            // a missed heartbeat for 2 s (8 beats at 4 Hz) trips the deadman
+            zenoh = await connect("/zenoh-web", { heartbeatHz: 4, heartbeatMisses: 8 })
+        } catch {
+            connection = "lost"; renderStatus()
+            await new Promise((resolve) => setTimeout(resolve, 3000))
         }
-        return
     }
-    // WebTransport needs a secure context. http://127.0.0.1 qualifies; a desktop
-    // bound to 0.0.0.0 and browsed over plain http from elsewhere does not.
-    if (!window.isSecureContext) {
-        console.warn("teleop: not a secure context, so no WebTransport — staying on the bridge")
-        return
-    }
-    let connect
-    try {
-        ({ connect } = await import(info.sdk))
-    } catch (error) {
-        console.warn(`teleop: cockpit SDK unavailable at ${info.sdk}`, error)
-        return
-    }
-    const session = connect({ url: info.url })
-    session.status.subscribe(() => {
-        if (session.status.get().transport.phase !== "connected") {
-            useSource("bridge")
-        }
-    })
-    // jpeg.v1 decodes to the raw JPEG bytes; pixel decode is the consumer's job.
-    // Snapshots re-publish the LAST frame while the channel is silent (rising age
-    // buckets), so only a new slot version counts as live relay video — otherwise
-    // a dead relay's frozen frame keeps winning over the bridge fallback.
-    let lastSlotVersion = -1
-    session.subscribe("color_image", (snapshot) => {
-        const slot = snapshot.slot
-        if (!slot || !slot.value || slot.version === lastSlotVersion) {
-            return
-        }
-        lastSlotVersion = slot.version
-        useSource("relay")
-        showJpeg(slot.value)
-    })
+    connection = "connected"; renderStatus()
+    zenoh.onState((state) => { connection = state; renderStatus() })
+    zenoh.subscribe(IMAGE_KEY, { delivery: "latest", maxHz: 20, codec: "dimos-image" }, (msg) => showVideo(msg.mediaStream))
+    armPublisher()
 }
-startRelayVideo()
-
-// ── incoming frames + status ────────────────────────────────────────────────
-app.receiveRequest((kind, payload) => {
-    if (kind === "frame" && payload && payload.bytes) {
-        if (videoSource === "relay") {
-            return
-        }
-        showJpeg(payload.bytes)
-    } else if (kind === "status") {
-        bridgeStatus = { on: !!(payload && payload.zenoh), error: (payload && payload.error) || "" }
-        renderStatus()
-    }
-})
+start()
 
 // ── WASD input → velocity ───────────────────────────────────────────────────
 const keys = new Set()
@@ -299,10 +249,10 @@ function tick() {
     document.getElementById("r-wz").textContent = wz.toFixed(2)
     const moving = vx !== 0 || vy !== 0 || wz !== 0
     if (moving) {
-        app.send("cmd_vel", { vx, vy, wz })  // heartbeat: re-sent every tick while held
+        send(twistBytes(vx, vy, wz))  // re-sent every tick while held
         lastNonZero = true
     } else if (lastNonZero) {
-        app.send("stop")
+        send(STOP)
         lastNonZero = false
     }
 }
@@ -317,7 +267,7 @@ function release(key) {
 function stopNow() {
     for (const key of keys) reflect(key, false)
     keys.clear()
-    app.send("stop")
+    send(STOP)
     lastNonZero = false
 }
 
@@ -350,7 +300,6 @@ for (const [key, el] of keyEls) {
 
 document.getElementById("stop").addEventListener("click", stopNow)
 
-app.send("hello")
 </script>
 </body>
 </html>
