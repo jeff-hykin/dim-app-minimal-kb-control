@@ -8,19 +8,16 @@
             systems = [ "aarch64-darwin" "x86_64-darwin" "x86_64-linux" "aarch64-linux" ];
             forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
         in {
-            apps = forAllSystems (pkgs: {
-                install = {
-                    type = "app";
-                    # nothing to build (a plain-JS page); parse its module script so a broken edit fails the install
-                    program = toString (pkgs.writeShellScript "install" ''
-                        set -e
-                        page=dim/apps/teleop/frontend/index.html
-                        test -f dim/apps/teleop/frontend/icon.svg
-                        ${pkgs.gawk}/bin/awk '/<script type="module">/{on=1; next} /<\/script>/{on=0} on' "$page" \
-                            | ${pkgs.esbuild}/bin/esbuild --loader=js --format=esm --log-level=error > /dev/null
-                        echo "dim-teleop: $page parses"
-                    '');
-                };
+            packages = forAllSystems (pkgs: {
+                # a static page, served at /apps/<name>/; the rail icon rides along for the page's own use
+                dimosApp = pkgs.runCommand "dim-teleop" { } ''
+                    cp -r ${self}/dim/apps/teleop/frontend $out
+                    chmod -R u+w $out
+                    cp ${self}/icon.svg $out/icon.svg
+                    # nothing to build (a plain-JS page); parse its module script so a broken edit fails the build
+                    ${pkgs.gawk}/bin/awk '/<script type="module">/{on=1; next} /<\/script>/{on=0} on' $out/index.html \
+                        | ${pkgs.esbuild}/bin/esbuild --loader=js --format=esm --log-level=error > /dev/null
+                '';
             });
         };
 }

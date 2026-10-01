@@ -1,11 +1,4 @@
-name: dim-teleop
-install: nix run .#install
-apps:
-    - name: teleop
-      title: Teleop
-      icon: dim/apps/teleop/frontend/icon.svg
-      frontend: dim/apps/teleop/frontend
-requires:
-    dimos-desktop:
-        version: ">=0.2.0"
-        apis: { app.frontend: 1, api.zenoh_web: 1 }
+title: Teleop
+dimos-desktop-api: ">=1 <2"
+dimos-api:
+    - /zenoh-web
