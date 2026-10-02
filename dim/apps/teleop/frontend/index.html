@@ -16,6 +16,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<meta name="color-scheme" content="dark" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Teleop · DimOS</title>
 <link rel="stylesheet" href="theme.css" />
@@ -30,7 +31,7 @@
 
   .topbar { position: absolute; top: 0; left: 0; right: 0; height: 48px; z-index: 5;
     display: flex; align-items: center; gap: 10px; padding: 0 16px;
-    border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--card) 82%, transparent);
+    border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--card) 82%, transparent);
     backdrop-filter: blur(10px); box-shadow: var(--shadow-xs); }
   .topbar .brand { width: 22px; height: 22px; flex: none; color: #22d3ee; }
   .topbar .title { font-size: 14px; font-weight: 650; letter-spacing: 0.02em; }
@@ -38,33 +39,33 @@
   .topbar .spacer { flex: 1; }
   .pill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px;
     color: var(--muted-fg); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
-    background: color-mix(in oklch, var(--card) 60%, transparent); }
+    background: color-mix(in srgb, var(--card) 60%, transparent); }
   .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-fg); transition: background .3s; }
   .pill.on { color: color-mix(in oklch, var(--info) 70%, var(--fg)); border-color: color-mix(in oklch, var(--info) 35%, var(--border)); }
-  .pill.on .dot { background: var(--info); box-shadow: 0 0 0 3px color-mix(in oklch, var(--info) 22%, transparent); }
+  .pill.on .dot { background: var(--info); box-shadow: 0 0 0 3px color-mix(in srgb, var(--info) 22%, transparent); }
 
   .dock { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 4;
     display: flex; align-items: flex-end; gap: 20px; padding: 14px 16px;
-    background: color-mix(in oklch, var(--card) 88%, transparent); border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--card) 88%, transparent); border: 1px solid var(--border);
     border-radius: var(--radius-lg); box-shadow: var(--shadow-md); backdrop-filter: blur(10px); }
 
   .pad { display: grid; grid-template-columns: repeat(3, 46px); grid-auto-rows: 46px; gap: 7px; flex: none; }
   .pad .key { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
     font-family: var(--mono); font-size: 15px; font-weight: 650; color: var(--fg); cursor: pointer; user-select: none;
-    touch-action: none; background: color-mix(in oklch, var(--card) 70%, transparent);
+    touch-action: none; background: color-mix(in srgb, var(--card) 70%, transparent);
     border: 1px solid var(--border); border-bottom-width: 3px; border-radius: var(--radius);
     transition: background .06s, transform .06s; }
   .pad .key small { font-size: 7.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-fg); font-weight: 700; }
   .pad .key.wide { grid-column: 1 / span 3; flex-direction: row; gap: 6px; font-size: 11px; letter-spacing: 0.08em; }
   .pad .key:hover { background: var(--accent); }
   .pad .key.active { background: var(--primary); color: var(--primary-fg, white); border-bottom-width: 1px;
-    transform: translateY(2px); box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 22%, transparent); }
-  .pad .key.active small { color: color-mix(in oklch, var(--primary-fg, white) 80%, transparent); }
+    transform: translateY(2px); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent); }
+  .pad .key.active small { color: color-mix(in srgb, var(--primary-fg, white) 80%, transparent); }
 
   .side { display: flex; flex-direction: column; gap: 10px; min-width: 200px; }
   .readout { display: flex; gap: 8px; font-family: var(--mono); font-size: 12px; }
   .readout .cell { flex: 1; text-align: center; border: 1px solid var(--border); border-radius: var(--radius-sm);
-    padding: 5px 4px; background: color-mix(in oklch, var(--card) 60%, transparent); }
+    padding: 5px 4px; background: color-mix(in srgb, var(--card) 60%, transparent); }
   .readout .cell b { display: block; font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--muted-fg); font-weight: 700; margin-bottom: 2px; }
   .sliders { display: grid; gap: 7px; }
@@ -80,10 +81,10 @@
   .keyhint { position: absolute; bottom: 20px; left: 18px; z-index: 4; font-family: var(--mono); font-size: 10px;
     color: var(--muted-fg); opacity: 0.75; line-height: 1.7; user-select: none; }
   .keyhint kbd { font-family: var(--mono); border: 1px solid var(--border); border-bottom-width: 2px;
-    border-radius: 4px; padding: 0 4px; color: var(--fg); background: color-mix(in oklch, var(--card) 70%, transparent); }
+    border-radius: 4px; padding: 0 4px; color: var(--fg); background: color-mix(in srgb, var(--card) 70%, transparent); }
 </style>
 </head>
-<body>
+<body class="science dark">
   <div id="stage">
     <video id="cam" muted playsinline autoplay></video>
     <div id="placeholder">
