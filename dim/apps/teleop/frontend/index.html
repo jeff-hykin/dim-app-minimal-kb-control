@@ -8,7 +8,7 @@
   are re-sent on a fixed tick while held, and a zero Twist is sent the moment
   input stops. Follows the desktop light/dark theme.
 
-  Everything goes through Desktop's zenoh-web bridge (/zenoh-web): `color_image`
+  Everything goes through Desktop's zenoh-web bridge (../../zenoh-web, i.e. Desktop's /zenoh-web): `color_image`
   arrives as an H.264 video track (the bridge's dimos-image codec), and
   `tele_cmd_vel` is published from the page with a zero-Twist deadman, so the
   bridge stops the robot if this page goes away mid-drive.
@@ -18,7 +18,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Teleop · DimOS</title>
-<link rel="stylesheet" href="/assets/theme.css" />
+<link rel="stylesheet" href="theme.css" />
 <style>
   html, body { height: 100%; margin: 0; overflow: hidden; font-family: var(--sans); color: var(--fg); }
   #stage { position: absolute; inset: 0; display: grid; place-items: center;
@@ -209,7 +209,7 @@ async function start() {
     while (!zenoh) {
         try {
             // a missed heartbeat for 2 s (8 beats at 4 Hz) trips the deadman
-            zenoh = await connect("/zenoh-web", { heartbeatHz: 4, heartbeatMisses: 8 })
+            zenoh = await connect(new URL("../../zenoh-web", location.href).href, { heartbeatHz: 4, heartbeatMisses: 8 })
         } catch {
             connection = "lost"; renderStatus()
             await new Promise((resolve) => setTimeout(resolve, 3000))

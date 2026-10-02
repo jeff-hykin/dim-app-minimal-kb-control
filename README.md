@@ -22,7 +22,7 @@ dimos-desktop install https://github.com/jeff-hykin/dim-app-minimal-kb-control -
 ## How it works
 
 The page is the whole app. It talks to the running stack through Desktop's
-[zenoh-web](https://github.com/jeff-hykin/zenoh-web) bridge (`connect("/zenoh-web")`):
+[zenoh-web](https://github.com/jeff-hykin/zenoh-web) bridge (`connect(new URL("../../zenoh-web", location.href).href)`, i.e. Desktop's same-origin `/zenoh-web`):
 
 - **Video** — subscribes to `dimos/color_image/sensor_msgs.Image` with the bridge's `dimos-image`
   codec, which turns it into an H.264 track for a `<video>` element.
