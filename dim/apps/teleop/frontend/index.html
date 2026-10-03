@@ -16,15 +16,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="color-scheme" content="dark" />
+<meta name="color-scheme" content="light dark" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Teleop · DimOS</title>
 <link rel="stylesheet" href="theme.css" />
 <style>
   html, body { height: 100%; margin: 0; overflow: hidden; font-family: var(--sans); color: var(--fg); }
   #stage { position: absolute; inset: 0; display: grid; place-items: center;
-    background: radial-gradient(120% 90% at 50% 0%, oklch(0.97 0.003 250) 0%, oklch(0.93 0.005 252) 100%); }
-  body.dark #stage { background: radial-gradient(120% 90% at 50% 0%, oklch(0.24 0.02 256) 0%, oklch(0.14 0.015 258) 100%); }
+    background: radial-gradient(120% 90% at 50% 0%, var(--accent) 0%, var(--bg) 100%); }
   #cam { width: 100%; height: 100%; object-fit: contain; display: none; }
   #placeholder { color: var(--muted-fg); font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; text-align: center; }
   #placeholder .big { font-size: 13px; color: var(--fg); font-family: var(--sans); font-weight: 600; margin-bottom: 6px; }
@@ -33,34 +32,26 @@
     display: flex; align-items: center; gap: 10px; padding: 0 16px;
     border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--card) 82%, transparent);
     backdrop-filter: blur(10px); box-shadow: var(--shadow-xs); }
-  .topbar .brand { width: 22px; height: 22px; flex: none; color: #22d3ee; }
-  .topbar .title { font-size: 14px; font-weight: 650; letter-spacing: 0.02em; }
+  .topbar .brand { width: 22px; height: 22px; flex: none; color: var(--primary); }
+  .topbar .title { font-size: 14px; font-weight: 600; letter-spacing: 0.02em; }
   .topbar .sub { font-size: 11px; color: var(--muted-fg); font-family: var(--mono); }
   .topbar .spacer { flex: 1; }
-  .pill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px;
-    color: var(--muted-fg); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
-    background: color-mix(in srgb, var(--card) 60%, transparent); }
-  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-fg); transition: background .3s; }
-  .pill.on { color: color-mix(in oklch, var(--ok) 70%, var(--fg)); border-color: color-mix(in oklch, var(--ok) 35%, var(--border)); }
-  .pill.on .dot { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
 
   .dock { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 4;
-    display: flex; align-items: flex-end; gap: 20px; padding: 14px 16px;
-    background: color-mix(in srgb, var(--card) 88%, transparent); border: 1px solid var(--border);
-    border-radius: var(--radius-lg); box-shadow: var(--shadow-md); backdrop-filter: blur(10px); }
+    display: flex; align-items: flex-end; gap: 20px; padding: 14px 16px; }
 
   .pad { display: grid; grid-template-columns: repeat(3, 46px); grid-auto-rows: 46px; gap: 7px; flex: none; }
   .pad .key { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
-    font-family: var(--mono); font-size: 15px; font-weight: 650; color: var(--fg); cursor: pointer; user-select: none;
+    font-family: var(--mono); font-size: 15px; font-weight: 600; color: var(--fg); cursor: pointer; user-select: none;
     touch-action: none; background: color-mix(in srgb, var(--card) 70%, transparent);
     border: 1px solid var(--border); border-bottom-width: 3px; border-radius: var(--radius);
     transition: background .06s, transform .06s; }
-  .pad .key small { font-size: 7.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-fg); font-weight: 700; }
+  .pad .key small { display: inline-flex; align-items: center; gap: 1px; font-size: 7.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-fg); font-weight: 700; }
   .pad .key.wide { grid-column: 1 / span 3; flex-direction: row; gap: 6px; font-size: 11px; letter-spacing: 0.08em; }
   .pad .key:hover { background: var(--accent); }
-  .pad .key.active { background: var(--primary); color: var(--primary-fg, white); border-bottom-width: 1px;
+  .pad .key.active { background: var(--primary); color: var(--primary-fg); border-bottom-width: 1px;
     transform: translateY(2px); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent); }
-  .pad .key.active small { color: color-mix(in srgb, var(--primary-fg, white) 80%, transparent); }
+  .pad .key.active small { color: color-mix(in srgb, var(--primary-fg) 80%, transparent); }
 
   .side { display: flex; flex-direction: column; gap: 10px; min-width: 200px; }
   .readout { display: flex; gap: 8px; font-family: var(--mono); font-size: 12px; }
@@ -69,22 +60,17 @@
   .readout .cell b { display: block; font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--muted-fg); font-weight: 700; margin-bottom: 2px; }
   .sliders { display: grid; gap: 7px; }
-  .sliders label { display: grid; grid-template-columns: 66px 1fr 46px; align-items: center; gap: 8px;
-    font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted-fg); font-weight: 700; }
+  .sliders label { display: grid; grid-template-columns: 66px 1fr 46px; align-items: center; gap: 8px; letter-spacing: 0.05em; }
   .sliders .val { font-family: var(--mono); font-size: 11px; text-align: right; color: var(--fg); }
-  input[type=range] { width: 100%; accent-color: var(--primary); }
-  .btn { font: inherit; font-size: 12px; font-weight: 650; color: var(--fg); cursor: pointer;
-    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 12px; }
-  .btn.stop { color: color-mix(in oklch, var(--destructive, oklch(0.62 0.2 25)) 80%, var(--fg));
-    border-color: color-mix(in oklch, var(--destructive, oklch(0.62 0.2 25)) 40%, var(--border)); }
-  .btn:hover { background: var(--accent); }
   .keyhint { position: absolute; bottom: 20px; left: 18px; z-index: 4; font-family: var(--mono); font-size: 10px;
     color: var(--muted-fg); opacity: 0.75; line-height: 1.7; user-select: none; }
   .keyhint kbd { font-family: var(--mono); border: 1px solid var(--border); border-bottom-width: 2px;
-    border-radius: 4px; padding: 0 4px; color: var(--fg); background: color-mix(in srgb, var(--card) 70%, transparent); }
+    border-radius: var(--radius-sm); padding: 0 4px; color: var(--fg); background: color-mix(in srgb, var(--card) 70%, transparent); }
 </style>
 </head>
-<body class="science dark">
+<body class="science">
+<script src="dim-theme.js"></script>
+<script type="module" src="dim-icons.js"></script>
   <div id="stage">
     <video id="cam" muted playsinline autoplay></video>
     <div id="placeholder">
@@ -103,19 +89,19 @@
     <span class="title">Teleop</span>
     <span class="sub">tele_cmd_vel &nbsp;·&nbsp; color_image</span>
     <span class="spacer"></span>
-    <span class="pill" id="status"><span class="dot"></span><span id="status-text">connecting…</span></span>
+    <span class="dim-badge dim-mono" id="status"><span class="dot"></span><span id="status-text">connecting…</span></span>
   </div>
 
   <div class="keyhint">click the view, then use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · <kbd>Q</kbd><kbd>E</kbd> strafe · <kbd>Space</kbd> stop</div>
 
-  <div class="dock">
+  <div class="dock dim-panel glass">
     <div class="pad" id="pad">
-      <div class="key" data-key="q">Q<small>strafe ◄</small></div>
+      <div class="key" data-key="q">Q<small>strafe <i data-dim-icon="chevron-left"></i></small></div>
       <div class="key" data-key="w">W<small>fwd</small></div>
-      <div class="key" data-key="e">E<small>strafe ►</small></div>
-      <div class="key" data-key="a">A<small>turn ◄</small></div>
+      <div class="key" data-key="e">E<small>strafe <i data-dim-icon="chevron-right"></i></small></div>
+      <div class="key" data-key="a">A<small>turn <i data-dim-icon="chevron-left"></i></small></div>
       <div class="key" data-key="s">S<small>back</small></div>
-      <div class="key" data-key="d">D<small>turn ►</small></div>
+      <div class="key" data-key="d">D<small>turn <i data-dim-icon="chevron-right"></i></small></div>
       <div class="key wide" data-key=" ">SPACE · stop</div>
     </div>
     <div class="side">
@@ -125,10 +111,10 @@
         <div class="cell"><b>ωz r/s</b><span id="r-wz">0.00</span></div>
       </div>
       <div class="sliders">
-        <label>Linear<input type="range" id="lin" min="0.05" max="1.5" step="0.05" value="0.5" /><span class="val" id="lin-v">0.50</span></label>
-        <label>Angular<input type="range" id="ang" min="0.1" max="3" step="0.1" value="1.0" /><span class="val" id="ang-v">1.00</span></label>
+        <label class="dim-label">Linear<input class="dim-range" type="range" id="lin" min="0.05" max="1.5" step="0.05" value="0.5" /><span class="val" id="lin-v">0.50</span></label>
+        <label class="dim-label">Angular<input class="dim-range" type="range" id="ang" min="0.1" max="3" step="0.1" value="1.0" /><span class="val" id="ang-v">1.00</span></label>
       </div>
-      <button class="btn stop" id="stop">■ Stop</button>
+      <button class="dim-btn danger icon" id="stop"><i data-dim-icon="stop"></i>Stop</button>
     </div>
   </div>
 
@@ -169,7 +155,7 @@ let connection = "connecting"
 
 function renderStatus() {
     const live = connection === "connected" && publisher?.state === "open"
-    statusEl.classList.toggle("on", live)
+    statusEl.classList.toggle("ok", live)
     statusText.textContent = live ? "zenoh-web" : (connection === "connected" ? "arming…" : (connection === "connecting" ? "connecting…" : "no bridge"))
 }
 
