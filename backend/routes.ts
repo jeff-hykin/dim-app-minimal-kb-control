@@ -51,7 +51,7 @@ let limits = loadLimits()
 let command: Command | null = null
 /** the newest move, dry runs included, for the readout */
 let lastCommand: Command | null = null
-let expiry: number | undefined
+let expiry: ReturnType<typeof setTimeout> | undefined
 const pages = new Map<string, Page>()
 const frameWaiters = new Map<string, (frame: { dataUrl: string; width: number; height: number }) => void>()
 
