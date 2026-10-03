@@ -1,23 +1,28 @@
 {
-    description = "dim-teleop: keyboard teleop over zenoh-web, as a dimOS Desktop app";
-
+    description = "Teleop (dim-app-minimal-kb-control), a dimOS Desktop app: `nix build .#dimosApp` → bin/dimos-app-server (Deno backend + built React frontend)";
     inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-
+    nixConfig = {
+        extra-substituters = [ "https://dimos-desktop.cachix.org" ];
+        extra-trusted-public-keys = [ "dimos-desktop.cachix.org-1:A4P35aGJGmCan92LWyamtSFXMqaVE+VRFYnrJ8QMTeQ=" ];
+    };
     outputs = { self, nixpkgs }:
         let
             systems = [ "aarch64-darwin" "x86_64-darwin" "x86_64-linux" "aarch64-linux" ];
-            forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+            forAll = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
         in {
-            packages = forAllSystems (pkgs: {
-                # a static page, served at /apps/<name>/; the rail icon rides along for the page's own use
-                dimosApp = pkgs.runCommand "dim-teleop" { } ''
-                    cp -r ${self}/dim/apps/teleop/frontend $out
-                    chmod -R u+w $out
-                    cp ${self}/icon.svg $out/icon.svg
-                    # nothing to build (a plain-JS page); parse its module script so a broken edit fails the build
-                    ${pkgs.gawk}/bin/awk '/<script type="module">/{on=1; next} /<\/script>/{on=0} on' $out/index.html \
-                        | ${pkgs.esbuild}/bin/esbuild --loader=js --format=esm --log-level=error > /dev/null
+            packages = forAll (pkgs: rec {
+                frontend = pkgs.buildNpmPackage {
+                    pname = "teleop-frontend";
+                    version = "0.1.0";
+                    src = ./frontend;
+                    # `nix build .#frontend` prints the right hash when package-lock.json changes
+                    npmDepsHash = "sha256-bbXf00tnvQyYiuycu+79GVJXGu0BpVswwPC78R4J9eI=";
+                    installPhase = "cp -r dist $out";
+                };
+                dimosApp = pkgs.writeShellScriptBin "dimos-app-server" ''
+                    exec ${pkgs.deno}/bin/deno run -A --no-lock ${./backend}/main.ts --frontend ${frontend} "$@"
                 '';
+                default = dimosApp;
             });
         };
 }

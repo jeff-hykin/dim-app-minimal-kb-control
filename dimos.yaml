@@ -1,3 +1,65 @@
 title: Teleop
 dimos-desktop-api: ">=2 <3"
 zenoh-web: ">=0.4 <0.5"
+caches:
+    - url: "https://dimos-desktop.cachix.org"
+      key: "dimos-desktop.cachix.org-1:A4P35aGJGmCan92LWyamtSFXMqaVE+VRFYnrJ8QMTeQ="
+agent:
+    description: >-
+        Teleop: drive the robot by publishing velocity commands on tele_cmd_vel (geometry_msgs.Twist), and see its
+        color_image camera
+    endpoints:
+        - method: GET
+          path: api/state
+          description: >-
+              Teleop's state: speed limits, the velocity being published now (with time left), the last move (dry runs too),
+              and how many open pages can publish / show video
+          role: context
+        - method: POST
+          path: api/move
+          description: >-
+              Drive: publish a velocity on tele_cmd_vel for durationMs, then stop. vx forward (+) / back (m/s), vy strafe left
+              (+) / right, wz turn left (+) / right (rad/s); each is clamped to the speed limits. dryRun validates and shows
+              it in the UI without moving the robot. Needs an open Teleop page (it holds the zenoh-web link); else 409
+          params:
+              vx:
+                  type: number
+                  description: "forward velocity, m/s (default 0)"
+              vy:
+                  type: number
+                  description: "strafe velocity, m/s, + = left (default 0)"
+              wz:
+                  type: number
+                  description: "turn rate, rad/s, + = left (default 0)"
+              durationMs:
+                  type: number
+                  description: "how long, 1-10000 ms (default 1000)"
+              dryRun:
+                  type: boolean
+                  description: 'true: don''t publish, only report what would be sent'
+              source:
+                  type: string
+                  description: 'who is driving, shown in the UI (default "agent")'
+        - method: POST
+          path: api/stop
+          description: "Stop now: publish a zero Twist on tele_cmd_vel (always safe to call)"
+          params:
+              source:
+                  type: string
+                  description: who stopped it (default "agent")
+        - method: PUT
+          path: api/limits
+          description: 'Set the speed limits every move is clamped to: linear 0.05-1.5 m/s, angular 0.1-3 rad/s (the UI''s sliders)'
+          params:
+              linear:
+                  type: number
+                  description: "max |vx| and |vy|, m/s"
+              angular:
+                  type: number
+                  description: "max |wz|, rad/s"
+        - method: GET
+          path: api/camera
+          description: >-
+              The robot's current color_image camera frame as a JPEG (taken from an open Teleop page's video); 503 when no
+              page shows video
+          role: view

@@ -1,0 +1,227 @@
+html, body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    font-family: var(--sans);
+    color: var(--fg);
+}
+#stage {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(120% 90% at 50% 0%, var(--accent) 0%, var(--bg) 100%);
+}
+#cam {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: none;
+}
+#placeholder {
+    color: var(--muted-fg);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-align: center;
+}
+#placeholder .big {
+    font-size: 13px;
+    color: var(--fg);
+    font-family: var(--sans);
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.topbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 48px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--card) 82%, transparent);
+    backdrop-filter: blur(10px);
+    box-shadow: var(--shadow-xs);
+}
+.topbar .brand {
+    width: 22px;
+    height: 22px;
+    flex: none;
+    color: var(--primary);
+}
+.topbar .title {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+.topbar .sub {
+    font-size: 11px;
+    color: var(--muted-fg);
+    font-family: var(--mono);
+}
+.topbar .spacer {
+    flex: 1;
+}
+
+.dock {
+    position: absolute;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 4;
+    display: flex;
+    align-items: flex-end;
+    gap: 20px;
+    padding: 14px 16px;
+}
+
+.pad {
+    display: grid;
+    grid-template-columns: repeat(3, 46px);
+    grid-auto-rows: 46px;
+    gap: 7px;
+    flex: none;
+}
+.pad .key {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--fg);
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+    background: color-mix(in srgb, var(--card) 70%, transparent);
+    border: 1px solid var(--border);
+    border-bottom-width: 3px;
+    border-radius: var(--radius);
+    transition: background 0.06s, transform 0.06s;
+}
+.pad .key small {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    font-size: 7.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted-fg);
+    font-weight: 700;
+}
+.pad .key.wide {
+    grid-column: 1 / span 3;
+    flex-direction: row;
+    gap: 6px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+}
+.pad .key:hover {
+    background: var(--accent);
+}
+.pad .key.active {
+    background: var(--primary);
+    color: var(--primary-fg);
+    border-bottom-width: 1px;
+    transform: translateY(2px);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+.pad .key.active small {
+    color: color-mix(in srgb, var(--primary-fg) 80%, transparent);
+}
+
+.side {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 200px;
+}
+.readout {
+    display: flex;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+}
+.readout .cell {
+    flex: 1;
+    text-align: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 4px;
+    background: color-mix(in srgb, var(--card) 60%, transparent);
+}
+.readout .cell b {
+    display: block;
+    font-size: 8.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted-fg);
+    font-weight: 700;
+    margin-bottom: 2px;
+}
+.sliders {
+    display: grid;
+    gap: 7px;
+}
+.sliders label {
+    display: grid;
+    grid-template-columns: 66px 1fr 46px;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.05em;
+}
+.sliders .val {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-align: right;
+    color: var(--fg);
+}
+.keyhint {
+    position: absolute;
+    bottom: 20px;
+    left: 18px;
+    z-index: 4;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted-fg);
+    opacity: 0.75;
+    line-height: 1.7;
+    user-select: none;
+}
+.keyhint kbd {
+    font-family: var(--mono);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: var(--radius-sm);
+    padding: 0 4px;
+    color: var(--fg);
+    background: color-mix(in srgb, var(--card) 70%, transparent);
+}
+#root {
+    height: 100%;
+}
+.readout .cell.dry {
+    opacity: 0.75;
+    border-style: dashed;
+}
+.lastmove {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--muted-fg);
+    min-height: 20px;
+}
+.dock .dim-alert {
+    max-width: 260px;
+    font-size: 11px;
+}
